@@ -7,6 +7,7 @@ Env vars (set as GitHub Actions secrets):
 import base64
 import datetime as dt
 import json
+import math
 import os
 import re
 import sys
@@ -17,7 +18,7 @@ import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519, padding
 
-VERSION = "V1.1"
+VERSION = "V1.2"
 BASE = "https://api.elections.kalshi.com"
 API = "/trade-api/v2"
 OUT = Path(__file__).resolve().parent.parent / "site" / "data.json"
@@ -157,9 +158,37 @@ def fetch_events(event_tickers):
     return events
 
 
+def leg_info(m, markets):
+    """Legs of a combo with a live probability for each, plus the estimated combo win chance."""
+    legs, prob = [], 1.0
+    subs = (m.get("no_sub_title") or "").split(",")
+    for i, leg in enumerate(m.get("mve_selected_legs") or []):
+        lm = markets.get(leg.get("market_ticker"), {})
+        side = (leg.get("side") or "yes").lower()
+        label = subs[i].strip() if i < len(subs) else ""
+        if label.lower().startswith(("yes ", "no ")):
+            label = label.split(" ", 1)[1]
+        label = label or lm.get("yes_sub_title") or lm.get("title") or leg.get("market_ticker")
+        result = (lm.get("result") or "").lower()
+        if result in ("yes", "no"):
+            p = 1.0 if result == side else 0.0
+            status = "hit" if p == 1.0 else "miss"
+        else:
+            yb, ya, lp = price(lm, "yes_bid"), price(lm, "yes_ask"), price(lm, "last_price")
+            yes_p = (yb + ya) / 2 if yb is not None and ya not in (None, 0) else lp
+            if yes_p is None:
+                yes_p = 0.5
+            p = yes_p if side == "yes" else 1 - yes_p
+            status = "live"
+        prob *= p
+        legs.append({"label": label, "side": side.upper(), "prob": round(p * 100, 1), "status": status})
+    return legs, prob
+
+
 def category_for(market, event):
     series = (event.get("series_ticker") or market.get("event_ticker", "").split("-")[0]).upper()
-    for tag, label in (("NFL", "NFL"), ("NBA", "NBA"), ("NCAAF", "College FB"), ("NCAAB", "College BB"),
+    for tag, label in (("NFL", "NFL"), ("NBA", "NBA"), ("NCAAF", "College FB"), ("NCAAB", "College BB"), ("NCAAMB", "College BB"),
+                       ("NCAAWB", "College BB"),
                        ("NHL", "NHL"), ("MLB", "MLB"), ("MLS", "Soccer"), ("EPL", "Soccer"),
                        ("UFC", "UFC"), ("ATP", "Tennis"), ("WTA", "Tennis"), ("ITF", "Tennis"),
                        ("MVE", "Combos")):
@@ -190,12 +219,11 @@ def build_open(positions, markets, events):
             mark = cost / n if n else 0
         value = mark * n
         is_combo = bool(m.get("mve_selected_legs")) or "MVE" in (m.get("event_ticker") or "")
-        legs = []
+        legs, combo_prob = ([], None)
         if is_combo:
-            subs = (m.get("no_sub_title") or "").split(",")
-            for i, leg in enumerate(m.get("mve_selected_legs") or []):
-                label = subs[i].strip() if i < len(subs) else leg.get("market_ticker")
-                legs.append({"label": label, "side": leg.get("side", "yes").upper()})
+            legs, combo_prob = leg_info(m, markets)
+            if side == "NO":
+                combo_prob = 1 - combo_prob
         pick = m.get("yes_sub_title") if side == "YES" else m.get("no_sub_title")
         if is_combo:
             pick = f"{len(legs)}-leg combo" if side == "YES" else f"Against {len(legs)}-leg combo"
@@ -217,7 +245,8 @@ def build_open(positions, markets, events):
             "pnl": round(value - cost, 2),
             "max_payout": round(n * 1.0, 2),
             "max_profit": round(n * 1.0 - cost, 2),
-            "win_prob": round(mark * 100, 1),
+            "win_prob": round((combo_prob if combo_prob is not None else mark) * 100, 1),
+            "prob_estimated": combo_prob is not None,
             "fees": round(num(p, "fees_paid"), 2),
             "status": m.get("status", ""),
             "close_time": m.get("close_time"),
@@ -230,34 +259,43 @@ def build_open(positions, markets, events):
     return bets
 
 
-def build_settled(settlements, markets, events):
+def build_settled(closed, settlements, markets, events):
+    """Closed bets, P/L from Kalshi's realized P/L (includes early sells) minus fees."""
+    by_ticker = {}
+    for st in settlements:
+        by_ticker.setdefault(st.get("ticker"), st)
     out = []
-    for s in settlements:
-        t = s.get("ticker")
+    for p in closed:
+        t = p.get("ticker")
         m = markets.get(t, {})
         e = events.get(m.get("event_ticker"), {})
-        yes_n, no_n = num(s, "yes_count"), num(s, "no_count")
-        cost = num(s, "yes_total_cost") + num(s, "no_total_cost")
-        revenue = num(s, "revenue")
-        fees = num(s, "fee_cost")
-        result = (s.get("market_result") or m.get("result") or "").upper()
-        side = "YES" if yes_n >= no_n else "NO"
+        st = by_ticker.get(t, {})
+        fees = num(p, "fees_paid")
+        pnl = num(p, "realized_pnl") - fees
+        yes_n, no_n = num(st, "yes_count"), num(st, "no_count")
+        yes_c, no_c = num(st, "yes_total_cost"), num(st, "no_total_cost")
+        side = "YES" if (yes_n, yes_c) >= (no_n, no_c) else "NO"
         is_combo = "MVE" in (m.get("event_ticker") or t or "")
-        pnl = revenue - cost - fees
+        legs = leg_info(m, markets)[0] if is_combo else []
+        pick = (m.get("yes_sub_title") if side == "YES" else m.get("no_sub_title")) or side
+        if is_combo:
+            pick = f"{len(legs)}-leg combo"
+        print(f"  settled {t[:40]:40s} realized={num(p, 'realized_pnl'):8.2f} fees={fees:6.2f} pnl={pnl:8.2f}")
         out.append({
             "ticker": t,
-            "event_title": e.get("title") or m.get("title") or t,
-            "market_title": m.get("title") or t,
-            "pick": (m.get("yes_sub_title") if side == "YES" else m.get("no_sub_title")) or side,
+            "event_title": f"Combo \u00b7 {len(legs)} legs" if is_combo else (e.get("title") or m.get("title") or t),
+            "market_title": "" if is_combo else (m.get("title") or t),
+            "pick": pick,
             "side": side,
             "category": category_for(m, e),
-            "contracts": max(yes_n, no_n),
-            "cost": round(cost, 2),
-            "payout": round(revenue, 2),
+            "contracts": round(max(yes_n, no_n), 2),
+            "cost": round(num(p, "total_traded"), 2),
+            "fees": round(fees, 2),
             "pnl": round(pnl, 2),
-            "result": "WON" if pnl > 0 else ("PUSH" if abs(pnl) < 0.005 else "LOST"),
-            "market_result": result,
-            "settled_time": s.get("settled_time"),
+            "result": "WON" if pnl > 0.004 else ("LOST" if pnl < -0.004 else "PUSH"),
+            "market_result": (st.get("market_result") or m.get("result") or "").upper(),
+            "legs": legs,
+            "settled_time": st.get("settled_time") or m.get("close_time"),
             "url": kalshi_url(e.get("series_ticker"), e.get("title") or m.get("title"),
                               m.get("event_ticker", ""), is_combo),
         })
@@ -269,15 +307,25 @@ def main():
     bal = signed_get("/portfolio/balance")
     positions = paged("/portfolio/positions", "market_positions",
                       {"limit": 200, "count_filter": "position"})
-    settlements = paged("/portfolio/settlements", "settlements", {"limit": 100}, max_pages=3)
+    closed = paged("/portfolio/positions", "market_positions",
+                   {"limit": 200, "settlement_status": "settled"}, max_pages=5)
+    closed = [p for p in closed if num(p, "position") == 0]
+    settlements = paged("/portfolio/settlements", "settlements", {"limit": 100}, max_pages=8)
+    if positions:
+        print("position fields:", sorted(positions[0].keys()))
+    if closed:
+        print("closed fields:", sorted(closed[0].keys()))
 
     tickers = {p["ticker"] for p in positions if num(p, "position") != 0}
-    tickers |= {s["ticker"] for s in settlements if s.get("ticker")}
+    tickers |= {p["ticker"] for p in closed}
     markets = fetch_markets(tickers)
-    events = fetch_events({m.get("event_ticker") for m in markets.values()})
+    leg_tickers = {leg.get("market_ticker") for m in markets.values()
+                   for leg in (m.get("mve_selected_legs") or [])} - set(markets)
+    markets.update(fetch_markets(leg_tickers))
+    events = fetch_events({markets[t].get("event_ticker") for t in tickers if t in markets})
 
     open_bets = build_open(positions, markets, events)
-    settled = build_settled(settlements, markets, events)
+    settled = build_settled(closed, settlements, markets, events)
 
     won = sum(1 for s in settled if s["result"] == "WON")
     lost = sum(1 for s in settled if s["result"] == "LOST")
@@ -285,7 +333,7 @@ def main():
         "version": VERSION,
         "updated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "summary": {
-            "cash": round(num(bal, "balance"), 2),
+            "cash": math.floor(num(bal, "balance") * 100 + 1e-6) / 100,
             "portfolio_value": round(num(bal, "portfolio_value"), 2),
             "open_count": len(open_bets),
             "at_risk": round(sum(b["cost"] for b in open_bets), 2),
