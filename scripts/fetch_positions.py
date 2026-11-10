@@ -15,15 +15,15 @@ from pathlib import Path
 
 import requests
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import ed25519, padding
 
-VERSION = "V1.0"
+VERSION = "V1.1"
 BASE = "https://api.elections.kalshi.com"
 API = "/trade-api/v2"
 OUT = Path(__file__).resolve().parent.parent / "site" / "data.json"
 
 KEY_ID = os.environ.get("KALSHI_API_KEY_ID", "").strip()
-PEM = os.environ.get("KALSHI_PRIVATE_KEY", "").strip()
+PEM = os.environ.get("KALSHI_PRIVATE_KEY", "").strip().replace("\\n", "\n")
 if not KEY_ID or not PEM:
     sys.exit("Missing KALSHI_API_KEY_ID or KALSHI_PRIVATE_KEY secret.")
 PRIVATE_KEY = serialization.load_pem_private_key(PEM.encode(), password=None)
@@ -37,11 +37,14 @@ def signed_get(path, params=None):
     ts = str(int(time.time() * 1000))
     full_path = API + path
     msg = (ts + "GET" + full_path).encode()
-    sig = PRIVATE_KEY.sign(
-        msg,
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
-        hashes.SHA256(),
-    )
+    if isinstance(PRIVATE_KEY, ed25519.Ed25519PrivateKey):
+        sig = PRIVATE_KEY.sign(msg)
+    else:
+        sig = PRIVATE_KEY.sign(
+            msg,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+            hashes.SHA256(),
+        )
     headers = {
         "KALSHI-ACCESS-KEY": KEY_ID,
         "KALSHI-ACCESS-TIMESTAMP": ts,
