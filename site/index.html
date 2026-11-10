@@ -56,7 +56,13 @@ a.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;back
 .kv div{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .kv b{display:block;font-size:14px;color:var(--text);text-transform:none;letter-spacing:0;margin-top:2px}
 .legs{margin:8px 0 0;padding:0;list-style:none;font-size:12px;color:var(--muted)}
-.legs li{padding:3px 0;border-bottom:1px dashed var(--line)}
+.legs li{padding:3px 0;border-bottom:1px dashed var(--line);display:flex;gap:6px;align-items:baseline}
+.legs li .lb{flex:1}
+.legs li .lp{font-family:"JetBrains Mono",monospace;font-size:11px}
+.legs .ic{width:12px;text-align:center;font-weight:700}
+.legs .hit .ic{color:var(--green)}.legs .miss .ic{color:var(--red)}.legs .miss .lb{text-decoration:line-through}
+.legs .live .ic{color:var(--muted)}
+.legs .no{color:var(--red);font-weight:700;font-size:10px}
 .legs li:last-child{border:0}
 .res{font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px}
 .res.WON{background:rgba(34,197,94,.15);color:var(--green)}
@@ -75,7 +81,7 @@ a.card:hover .go{opacity:1}
       <h1>Kalshi <span>Bet Board</span></h1>
       <div class="sub">Every open bet on one page. Tap a card to open it on Kalshi.</div>
     </div>
-    <div class="ver"><b id="ver">V1.0</b><br><span id="upd">loading…</span></div>
+    <div class="ver"><b id="ver">V1.2</b><br><span id="upd">loading…</span></div>
   </header>
 
   <section class="stats" id="stats"></section>
@@ -103,7 +109,7 @@ const money = (v, sign) => {
   const n = Number(v || 0), s = (sign && n > 0 ? "+" : n < 0 ? "-" : "");
   return s + "$" + Math.abs(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 };
-const cents = v => Math.round(Number(v || 0) * 100) + "¢";
+const cents = v => { const c = Number(v || 0) * 100; return (c > 0 && c < 10 ? c.toFixed(1) : Math.round(c)) + "¢"; };
 const cls = v => v > 0.004 ? "pos" : v < -0.004 ? "neg" : "";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -127,7 +133,7 @@ function renderStats() {
     ["Unrealized P/L", `<span class="${cls(s.unrealized)}">${money(s.unrealized, true)}</span>`],
     ["Max payout", money(s.max_payout)],
     ["Cash", money(s.cash)],
-    ["Settled P/L", `<span class="${cls(s.settled_pnl)}">${money(s.settled_pnl, true)}</span>`],
+    ["Settled return", `<span class="${cls(s.settled_pnl)}">${money(s.settled_pnl, true)}</span>`],
     ["Record", `${s.record.won}-${s.record.lost}`],
   ];
   $("#stats").innerHTML = items.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v mono">${v}</div></div>`).join("");
@@ -143,11 +149,16 @@ function renderChips() {
   }).join("");
 }
 
+function legsHtml(legs, showProb) {
+  if (!legs || !legs.length) return "";
+  const icon = {hit: "\u2713", miss: "\u2717", live: "\u2022"};
+  return `<ul class="legs">${legs.map(l => `<li class="${l.status || "live"}"><span class="ic">${icon[l.status] || "\u2022"}</span><span class="lb">${l.side === "NO" ? '<span class="no">NOT</span> ' : ""}${esc(l.label)}</span>${showProb && l.status === "live" && l.prob != null ? `<span class="lp">${Math.round(l.prob)}%</span>` : ""}</li>`).join("")}</ul>`;
+}
+
 function openCard(b) {
   const w = when(b.game_time || b.close_time);
   const edge = b.pnl > 0.004 ? "var(--green)" : b.pnl < -0.004 ? "var(--red)" : "var(--line)";
-  const legs = b.legs && b.legs.length
-    ? `<ul class="legs">${b.legs.map(l => `<li>${esc(l.label)}</li>`).join("")}</ul>` : "";
+  const legs = legsHtml(b.legs, true);
   const showMarket = b.market_title && b.market_title !== b.event_title && !b.legs?.length;
   return `<a class="card" href="${esc(b.url)}" target="_blank" rel="noopener" style="--edge:${edge}">
     <div class="top"><span class="cat">${esc(b.category)}</span><span class="when ${w.live ? "live" : ""}">${esc(w.t)}</span></div>
@@ -156,9 +167,9 @@ function openCard(b) {
     <div class="pick"><span class="side ${b.side}">${b.side}</span><span class="p">${esc(b.pick)}</span></div>
     ${legs}
     <div class="prob"><i style="width:${Math.max(0, Math.min(100, b.win_prob))}%"></i></div>
-    <div class="probl"><span>Market win chance</span><span class="mono">${b.win_prob}%</span></div>
+    <div class="probl"><span>${b.prob_estimated ? "Est. win chance (from legs)" : "Market win chance"}</span><span class="mono">${b.win_prob}%</span></div>
     <div class="kv">
-      <div>Contracts<b class="mono">${b.contracts.toLocaleString()}</b></div>
+      <div>Contracts<b class="mono">${Number(b.contracts).toLocaleString(undefined, {maximumFractionDigits: 2})}</b></div>
       <div>Avg cost<b class="mono">${cents(b.avg_cost)}</b></div>
       <div>Now<b class="mono">${cents(b.mark)}</b></div>
       <div>Risked<b class="mono">${money(b.cost)}</b></div>
@@ -172,15 +183,17 @@ function openCard(b) {
 function settledCard(b) {
   const d = b.settled_time ? new Date(b.settled_time).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"}) : "";
   const edge = b.result === "WON" ? "var(--green)" : b.result === "LOST" ? "var(--red)" : "var(--line)";
+  const label = {WON: "WON", LOST: "LOST", PUSH: "EVEN"}[b.result] || b.result;
   return `<a class="card" href="${esc(b.url)}" target="_blank" rel="noopener" style="--edge:${edge}">
     <div class="top"><span class="cat">${esc(b.category)}</span><span class="when">Settled ${esc(d)}</span></div>
     <div class="ev">${esc(b.event_title)}</div>
-    ${b.market_title !== b.event_title ? `<div class="evsub">${esc(b.market_title)}</div>` : ""}
-    <div class="pick"><span class="side ${b.side}">${b.side}</span><span class="p">${esc(b.pick)}</span><span class="res ${b.result}">${b.result}</span></div>
+    ${b.market_title && b.market_title !== b.event_title ? `<div class="evsub">${esc(b.market_title)}</div>` : ""}
+    <div class="pick"><span class="side ${b.side}">${b.side}</span><span class="p">${esc(b.pick)}</span><span class="res ${b.result}">${label}</span></div>
+    ${legsHtml(b.legs, false)}
     <div class="kv">
-      <div>Contracts<b class="mono">${b.contracts.toLocaleString()}</b></div>
-      <div>Risked<b class="mono">${money(b.cost)}</b></div>
-      <div>P/L<b class="mono ${cls(b.pnl)}">${money(b.pnl, true)}</b></div>
+      <div>Contracts<b class="mono">${b.contracts ? Number(b.contracts).toLocaleString(undefined, {maximumFractionDigits: 2}) : "—"}</b></div>
+      <div>Fees<b class="mono">${money(b.fees)}</b></div>
+      <div>Return<b class="mono ${cls(b.pnl)}">${money(b.pnl, true)}</b></div>
     </div>
     <span class="go">Open on Kalshi ↗</span>
   </a>`;
@@ -207,7 +220,7 @@ async function load() {
   try {
     const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"});
     DATA = await r.json();
-    $("#ver").textContent = DATA.version || "V1.0";
+    $("#ver").textContent = DATA.version || "V1.2";
     $("#upd").textContent = "Updated " + new Date(DATA.updated).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
     render();
   } catch (e) {
