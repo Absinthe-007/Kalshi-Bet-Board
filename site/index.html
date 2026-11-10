@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kalshi Bet Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f14;--panel:#121821;--panel2:#18202b;--line:#232e3c;
+  --text:#e8eef5;--muted:#8a99ab;--green:#22c55e;--red:#f04444;--accent:#3b82f6;
+  --yes:#16a34a;--no:#dc2626;--gold:#eab308;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 16px 60px}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px}
+h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
+h1 span{color:var(--green)}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+.ver{text-align:right;font-size:11px;color:var(--muted);line-height:1.5;white-space:nowrap}
+.ver b{color:var(--text);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.stat .v{font-size:22px;font-weight:700;margin-top:4px}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+.tabs{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px}
+.tab{border:0;background:none;color:var(--muted);font:600 13px Inter;padding:7px 14px;border-radius:8px;cursor:pointer}
+.tab.on{background:var(--panel2);color:var(--text)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;flex:1}
+.chip{border:1px solid var(--line);background:none;color:var(--muted);font:500 12px Inter;padding:6px 11px;border-radius:999px;cursor:pointer}
+.chip.on{border-color:var(--accent);color:var(--text);background:rgba(59,130,246,.12)}
+select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:500 13px Inter}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;transition:transform .12s,border-color .12s;position:relative;overflow:hidden}
+a.card:hover{transform:translateY(-2px);border-color:#3a4a5e}
+a.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--edge,var(--line))}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.cat{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:var(--panel2);padding:3px 7px;border-radius:5px}
+.when{font-size:11px;color:var(--muted)}
+.when.live{color:var(--gold);font-weight:600}
+.ev{font-size:15px;font-weight:700;line-height:1.3}
+.evsub{font-size:12px;color:var(--muted);margin-top:2px}
+.pick{display:flex;align-items:center;gap:8px;margin:10px 0}
+.side{font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;color:#fff}
+.side.YES{background:var(--yes)}.side.NO{background:var(--no)}
+.pick .p{font-weight:600;font-size:14px}
+.prob{height:6px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:4px 0 2px}
+.prob i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--green))}
+.probl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.kv div{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.kv b{display:block;font-size:14px;color:var(--text);text-transform:none;letter-spacing:0;margin-top:2px}
+.legs{margin:8px 0 0;padding:0;list-style:none;font-size:12px;color:var(--muted)}
+.legs li{padding:3px 0;border-bottom:1px dashed var(--line)}
+.legs li:last-child{border:0}
+.res{font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px}
+.res.WON{background:rgba(34,197,94,.15);color:var(--green)}
+.res.LOST{background:rgba(240,68,68,.15);color:var(--red)}
+.res.PUSH{background:var(--panel2);color:var(--muted)}
+.go{position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--muted);opacity:0;transition:opacity .12s}
+a.card:hover .go{opacity:1}
+.empty{color:var(--muted);text-align:center;padding:60px 0;border:1px dashed var(--line);border-radius:14px}
+@media (max-width:520px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:21px}.stat .v{font-size:18px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Kalshi <span>Bet Board</span></h1>
+      <div class="sub">Every open bet on one page. Tap a card to open it on Kalshi.</div>
+    </div>
+    <div class="ver"><b id="ver">V1.0</b><br><span id="upd">loading…</span></div>
+  </header>
+
+  <section class="stats" id="stats"></section>
+
+  <div class="bar">
+    <div class="tabs">
+      <button class="tab on" data-tab="open">Open</button>
+      <button class="tab" data-tab="settled">Settled</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <select id="sort">
+      <option value="time">Sort: Game time</option>
+      <option value="pnl">Sort: P/L</option>
+      <option value="cost">Sort: Amount risked</option>
+      <option value="prob">Sort: Win chance</option>
+    </select>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const money = (v, sign) => {
+  const n = Number(v || 0), s = (sign && n > 0 ? "+" : n < 0 ? "-" : "");
+  return s + "$" + Math.abs(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+};
+const cents = v => Math.round(Number(v || 0) * 100) + "¢";
+const cls = v => v > 0.004 ? "pos" : v < -0.004 ? "neg" : "";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+let DATA = null, TAB = "open", CAT = "All";
+
+function when(iso) {
+  if (!iso) return {t: "", live: false};
+  const d = new Date(iso), diff = d - Date.now();
+  const fmt = d.toLocaleString(undefined, {weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+  if (diff < 0 && diff > -4 * 3600e3) return {t: "In progress", live: true};
+  if (diff > 0 && diff < 3600e3) return {t: "Starts in " + Math.round(diff / 60e3) + "m", live: true};
+  return {t: fmt, live: false};
+}
+
+function renderStats() {
+  const s = DATA.summary;
+  const items = [
+    ["Open bets", s.open_count],
+    ["Amount risked", money(s.at_risk)],
+    ["Current value", money(s.open_value)],
+    ["Unrealized P/L", `<span class="${cls(s.unrealized)}">${money(s.unrealized, true)}</span>`],
+    ["Max payout", money(s.max_payout)],
+    ["Cash", money(s.cash)],
+    ["Settled P/L", `<span class="${cls(s.settled_pnl)}">${money(s.settled_pnl, true)}</span>`],
+    ["Record", `${s.record.won}-${s.record.lost}`],
+  ];
+  $("#stats").innerHTML = items.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v mono">${v}</div></div>`).join("");
+}
+
+function renderChips() {
+  const list = DATA[TAB] || [];
+  const cats = ["All", ...new Set(list.map(b => b.category))];
+  if (!cats.includes(CAT)) CAT = "All";
+  $("#chips").innerHTML = cats.map(c => {
+    const n = c === "All" ? list.length : list.filter(b => b.category === c).length;
+    return `<button class="chip ${c === CAT ? "on" : ""}" data-cat="${esc(c)}">${esc(c)} · ${n}</button>`;
+  }).join("");
+}
+
+function openCard(b) {
+  const w = when(b.game_time || b.close_time);
+  const edge = b.pnl > 0.004 ? "var(--green)" : b.pnl < -0.004 ? "var(--red)" : "var(--line)";
+  const legs = b.legs && b.legs.length
+    ? `<ul class="legs">${b.legs.map(l => `<li>${esc(l.label)}</li>`).join("")}</ul>` : "";
+  const showMarket = b.market_title && b.market_title !== b.event_title && !b.legs?.length;
+  return `<a class="card" href="${esc(b.url)}" target="_blank" rel="noopener" style="--edge:${edge}">
+    <div class="top"><span class="cat">${esc(b.category)}</span><span class="when ${w.live ? "live" : ""}">${esc(w.t)}</span></div>
+    <div class="ev">${esc(b.event_title)}</div>
+    ${showMarket ? `<div class="evsub">${esc(b.market_title)}</div>` : b.event_sub ? `<div class="evsub">${esc(b.event_sub)}</div>` : ""}
+    <div class="pick"><span class="side ${b.side}">${b.side}</span><span class="p">${esc(b.pick)}</span></div>
+    ${legs}
+    <div class="prob"><i style="width:${Math.max(0, Math.min(100, b.win_prob))}%"></i></div>
+    <div class="probl"><span>Market win chance</span><span class="mono">${b.win_prob}%</span></div>
+    <div class="kv">
+      <div>Contracts<b class="mono">${b.contracts.toLocaleString()}</b></div>
+      <div>Avg cost<b class="mono">${cents(b.avg_cost)}</b></div>
+      <div>Now<b class="mono">${cents(b.mark)}</b></div>
+      <div>Risked<b class="mono">${money(b.cost)}</b></div>
+      <div>P/L<b class="mono ${cls(b.pnl)}">${money(b.pnl, true)}</b></div>
+      <div>To win<b class="mono">${money(b.max_profit)}</b></div>
+    </div>
+    <span class="go">Open on Kalshi ↗</span>
+  </a>`;
+}
+
+function settledCard(b) {
+  const d = b.settled_time ? new Date(b.settled_time).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"}) : "";
+  const edge = b.result === "WON" ? "var(--green)" : b.result === "LOST" ? "var(--red)" : "var(--line)";
+  return `<a class="card" href="${esc(b.url)}" target="_blank" rel="noopener" style="--edge:${edge}">
+    <div class="top"><span class="cat">${esc(b.category)}</span><span class="when">Settled ${esc(d)}</span></div>
+    <div class="ev">${esc(b.event_title)}</div>
+    ${b.market_title !== b.event_title ? `<div class="evsub">${esc(b.market_title)}</div>` : ""}
+    <div class="pick"><span class="side ${b.side}">${b.side}</span><span class="p">${esc(b.pick)}</span><span class="res ${b.result}">${b.result}</span></div>
+    <div class="kv">
+      <div>Contracts<b class="mono">${b.contracts.toLocaleString()}</b></div>
+      <div>Risked<b class="mono">${money(b.cost)}</b></div>
+      <div>P/L<b class="mono ${cls(b.pnl)}">${money(b.pnl, true)}</b></div>
+    </div>
+    <span class="go">Open on Kalshi ↗</span>
+  </a>`;
+}
+
+function renderGrid() {
+  let list = (DATA[TAB] || []).filter(b => CAT === "All" || b.category === CAT);
+  const s = $("#sort").value;
+  const by = {
+    time: b => -new Date(b.game_time || b.close_time || b.settled_time || 0),
+    pnl: b => b.pnl, cost: b => b.cost, prob: b => b.win_prob ?? 0,
+  }[s];
+  list = [...list].sort((a, b) => s === "time"
+    ? (TAB === "settled" ? by(a) - by(b) : by(b) - by(a))
+    : by(b) - by(a));
+  $("#grid").innerHTML = list.length
+    ? list.map(TAB === "open" ? openCard : settledCard).join("")
+    : `<div class="empty" style="grid-column:1/-1">${TAB === "open" ? "No open bets right now." : "No settled bets yet."}</div>`;
+}
+
+function render() { renderStats(); renderChips(); renderGrid(); }
+
+async function load() {
+  try {
+    const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"});
+    DATA = await r.json();
+    $("#ver").textContent = DATA.version || "V1.0";
+    $("#upd").textContent = "Updated " + new Date(DATA.updated).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+    render();
+  } catch (e) {
+    $("#upd").textContent = "Couldn't load data";
+    $("#grid").innerHTML = `<div class="empty" style="grid-column:1/-1">No data yet. Run the "Update Kalshi bets" workflow on GitHub.</div>`;
+  }
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest(".tab");
+  if (t) { TAB = t.dataset.tab; document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t)); CAT = "All"; renderChips(); renderGrid(); return; }
+  const c = e.target.closest(".chip");
+  if (c) { CAT = c.dataset.cat; renderChips(); renderGrid(); }
+});
+$("#sort").addEventListener("change", renderGrid);
+load();
+setInterval(load, 5 * 60e3);
+</script>
+</body>
+</html>
