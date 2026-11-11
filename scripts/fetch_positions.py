@@ -18,7 +18,7 @@ import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519, padding
 
-VERSION = "V1.2"
+VERSION = "V1.3"
 BASE = "https://api.elections.kalshi.com"
 API = "/trade-api/v2"
 OUT = Path(__file__).resolve().parent.parent / "site" / "data.json"
