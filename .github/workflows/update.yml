@@ -1,9 +1,7 @@
 name: Update Kalshi bets
 
 on:
-  schedule:
-    - cron: "7,22,37,52 * * * *"   # every 15 min (GitHub may delay a few minutes)
-  workflow_dispatch:          # "Run workflow" button for an instant refresh
+  workflow_dispatch:          # triggered every 15 min by cron-job.org, or the "Run workflow" button
   push:
     branches: [main]
 
