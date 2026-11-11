@@ -71,7 +71,42 @@ a.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;back
 .go{position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--muted);opacity:0;transition:opacity .12s}
 a.card:hover .go{opacity:1}
 .empty{color:var(--muted);text-align:center;padding:60px 0;border:1px dashed var(--line);border-radius:14px}
-@media (max-width:520px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:21px}.stat .v{font-size:18px}.grid{grid-template-columns:1fr}}
+.game{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;position:relative;overflow:hidden}
+.game::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--edge,var(--line))}
+.tier{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:3px 7px;border-radius:5px}
+.tier.Lock{background:rgba(34,197,94,.18);color:var(--green)}
+.tier.Strong{background:rgba(59,130,246,.18);color:#7fb0ff}
+.tier.Lean{background:rgba(234,179,8,.15);color:var(--gold)}
+.tier.Toss-up{background:var(--panel2);color:var(--muted)}
+.team{display:grid;grid-template-columns:28px 1fr auto auto;gap:10px;align-items:center;width:100%;background:var(--panel2);border:1px solid transparent;border-radius:10px;padding:8px 10px;margin-top:6px;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.team:hover{border-color:#3a4a5e}
+.team.sel{border-color:var(--accent);background:rgba(59,130,246,.14)}
+.team img{width:28px;height:28px;object-fit:contain}
+.team .tn{font-weight:700;font-size:14px;line-height:1.2}
+.team .tr{font-size:11px;color:var(--muted)}
+.team .sc{font-family:"JetBrains Mono",monospace;font-size:18px;font-weight:700;min-width:34px;text-align:right}
+.team .wp{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);min-width:46px;text-align:right}
+.team.pk .tn::after{content:"PICK";margin-left:6px;font-size:9px;font-weight:800;letter-spacing:.06em;color:#0b0f14;background:var(--green);padding:2px 5px;border-radius:4px;vertical-align:2px}
+.team.pk .wp{color:var(--green);font-weight:700}
+.gmeta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-top:10px}
+.srcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.srcs div{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.srcs b{display:block;font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--text);letter-spacing:0;margin-top:2px}
+.srcs b.off{color:var(--red)}
+.glinks{display:flex;gap:10px;margin-top:10px;font-size:11px}
+.glinks a{color:var(--muted);text-decoration:none}.glinks a:hover{color:var(--text)}
+.note{font-size:12px;color:var(--muted);margin:-6px 0 14px;line-height:1.5}
+.pbtn{border:1px solid var(--line);background:var(--panel);color:var(--text);font:600 12px Inter;padding:7px 11px;border-radius:8px;cursor:pointer}
+.pbtn:hover{border-color:var(--accent)}
+#parlay{position:fixed;left:0;right:0;bottom:0;background:rgba(18,24,33,.97);border-top:1px solid var(--line);backdrop-filter:blur(6px);padding:10px 16px;display:none;z-index:5}
+#parlay.on{display:block}
+#parlay .in{max-width:1280px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+#parlay .lg{flex:1;min-width:200px;font-size:12px;color:var(--muted);line-height:1.5}
+#parlay .lg b{color:var(--text)}
+#parlay .pv{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+#parlay .pv b{display:block;font-family:"JetBrains Mono",monospace;font-size:17px;color:var(--text);letter-spacing:0}
+body.hasparlay .wrap{padding-bottom:130px}
+@media (max-width:520px){.chips{flex-basis:100%;order:3}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:21px}.stat .v{font-size:18px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -81,7 +116,7 @@ a.card:hover .go{opacity:1}
       <h1>Kalshi <span>Bet Board</span></h1>
       <div class="sub">Every open bet on one page. Tap a card to open it on Kalshi.</div>
     </div>
-    <div class="ver"><b id="ver">V1.2</b><br><span id="upd">loading…</span></div>
+    <div class="ver"><b id="ver">V1.3</b><br><span id="upd">loading…</span></div>
   </header>
 
   <section class="stats" id="stats"></section>
@@ -90,6 +125,7 @@ a.card:hover .go{opacity:1}
     <div class="tabs">
       <button class="tab on" data-tab="open">Open</button>
       <button class="tab" data-tab="settled">Settled</button>
+      <button class="tab" data-tab="picks">Game Picks</button>
     </div>
     <div class="chips" id="chips"></div>
     <select id="sort">
@@ -98,10 +134,21 @@ a.card:hover .go{opacity:1}
       <option value="cost">Sort: Amount risked</option>
       <option value="prob">Sort: Win chance</option>
     </select>
+    <select id="psort" style="display:none">
+      <option value="time">Sort: Game time</option>
+      <option value="prob">Sort: Most confident</option>
+    </select>
   </div>
+  <div class="note" id="pnote" style="display:none"></div>
 
   <div class="grid" id="grid"></div>
 </div>
+<div id="parlay"><div class="in">
+  <div class="lg" id="plegs"></div>
+  <div class="pv">Hit chance<b id="pprob">—</b></div>
+  <div class="pv">Fair odds<b id="podds">—</b></div>
+  <button class="pbtn" id="pclear">Clear</button>
+</div></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -113,7 +160,11 @@ const cents = v => { const c = Number(v || 0) * 100; return (c > 0 && c < 10 ? c
 const cls = v => v > 0.004 ? "pos" : v < -0.004 ? "neg" : "";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-let DATA = null, TAB = "open", CAT = "All";
+let DATA = null, PRED = null, TAB = "open", CAT = "All";
+let PARLAY = {};  // game id -> "home" | "away"
+try { PARLAY = JSON.parse(localStorage.getItem("kbb_parlay") || "{}") || {}; } catch (e) { PARLAY = {}; }
+const saveParlay = () => { try { localStorage.setItem("kbb_parlay", JSON.stringify(PARLAY)); } catch (e) {} };
+const amer = p => { if (!(p > 0 && p < 1)) return "—"; const o = p >= .5 ? -100 * p / (1 - p) : 100 * (1 - p) / p; return (o > 0 ? "+" : "") + Math.round(o); };
 
 function when(iso) {
   if (!iso) return {t: "", live: false};
@@ -140,11 +191,12 @@ function renderStats() {
 }
 
 function renderChips() {
-  const list = DATA[TAB] || [];
-  const cats = ["All", ...new Set(list.map(b => b.category))];
+  const list = TAB === "picks" ? (PRED?.games || []) : (DATA[TAB] || []);
+  const key = b => TAB === "picks" ? b.league : b.category;
+  const cats = ["All", ...new Set(list.map(key))];
   if (!cats.includes(CAT)) CAT = "All";
   $("#chips").innerHTML = cats.map(c => {
-    const n = c === "All" ? list.length : list.filter(b => b.category === c).length;
+    const n = c === "All" ? list.length : list.filter(b => key(b) === c).length;
     return `<button class="chip ${c === CAT ? "on" : ""}" data-cat="${esc(c)}">${esc(c)} · ${n}</button>`;
   }).join("");
 }
@@ -199,7 +251,86 @@ function settledCard(b) {
   </a>`;
 }
 
+function teamRow(g, side) {
+  const t = g[side], prob = side === "home" ? g.home_prob : 100 - g.home_prob;
+  const score = g.state === "in" && t.score != null ? t.score : (g.proj ? g.proj[side === "home" ? 0 : 1] : "—");
+  return `<button class="team ${g.pick === side ? "pk" : ""} ${PARLAY[g.id] === side ? "sel" : ""}" data-gid="${esc(g.id)}" data-side="${side}" title="Add ${esc(t.short)} to parlay">
+    ${t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy">` : "<span></span>"}
+    <span><span class="tn">${esc(t.short || t.name)}</span><br><span class="tr">${esc(t.record || "")}${side === "home" ? " · home" : ""}</span></span>
+    <span class="sc">${esc(score)}</span>
+    <span class="wp">${prob.toFixed(0)}%</span>
+  </button>`;
+}
+
+function gameCard(g) {
+  const w = when(g.start);
+  const live = g.state === "in";
+  const edge = {Lock: "var(--green)", Strong: "var(--accent)", Lean: "var(--gold)"}[g.tier] || "var(--line)";
+  const pickHome = g.pick === "home";
+  const srcs = g.sources.map(s => {
+    const v = pickHome ? s.home : 100 - s.home;
+    return `<div>${esc(s.name)}<b class="${v < 50 ? "off" : ""}">${v.toFixed(0)}%</b></div>`;
+  }).join("");
+  const pickTeam = g[g.pick];
+  const ln = g.line;
+  const lineTxt = ln ? [ln.details, ln.total ? "O/U " + ln.total : ""].filter(Boolean).join(" · ") : "No line posted yet";
+  const links = [["kalshi", "Kalshi"], ["polymarket", "Polymarket"], ["espn", "ESPN"]]
+    .filter(([k]) => g.links?.[k]).map(([k, n]) => `<a href="${esc(g.links[k])}" target="_blank" rel="noopener">${n} ↗</a>`).join("");
+  return `<div class="game" style="--edge:${edge}">
+    <div class="top"><span class="cat">${esc(g.league)}</span><span class="tier ${esc(g.tier)}">${esc(g.tier)}</span><span class="when ${live || w.live ? "live" : ""}">${esc(live ? g.status : w.t)}</span></div>
+    ${teamRow(g, "away")}
+    ${teamRow(g, "home")}
+    <div class="gmeta"><span>${live ? "Live score" : "Projected score"} · ${esc(lineTxt)}</span><span>${g.agree}/${g.n_sources} agree</span></div>
+    <div class="probl" style="margin-top:8px"><span>Consensus: <b style="color:var(--text)">${esc(pickTeam.short)}</b> wins</span><span class="mono">${g.pick_prob}% · fair ${g.fair_odds > 0 ? "+" : ""}${g.fair_odds ?? "—"}</span></div>
+    <div class="prob"><i style="width:${g.pick_prob}%"></i></div>
+    <div class="srcs">${srcs}</div>
+    <div class="glinks">${links}</div>
+  </div>`;
+}
+
+function renderParlay() {
+  const games = (PRED?.games || []);
+  const legs = Object.entries(PARLAY).map(([id, side]) => {
+    const g = games.find(x => String(x.id) === id);
+    return g ? {g, side, p: (side === "home" ? g.home_prob : 100 - g.home_prob) / 100} : null;
+  }).filter(Boolean);
+  // drop legs for games that are no longer listed
+  if (legs.length !== Object.keys(PARLAY).length) { PARLAY = Object.fromEntries(legs.map(l => [l.g.id, l.side])); saveParlay(); }
+  const on = legs.length > 0;
+  $("#parlay").classList.toggle("on", on);
+  document.body.classList.toggle("hasparlay", on);
+  if (!on) return;
+  const p = legs.reduce((a, l) => a * l.p, 1);
+  $("#plegs").innerHTML = `<b>${legs.length}-leg parlay:</b> ` + legs.map(l => `${esc(l.g[l.side].short)} <span class="mono">${Math.round(l.p * 100)}%</span>`).join(" · ");
+  $("#pprob").textContent = (p * 100).toFixed(p < .1 ? 1 : 0) + "%";
+  $("#podds").textContent = amer(p);
+}
+
+function autoParlay(n) {
+  const now = Date.now();
+  const best = (PRED?.games || []).filter(g => g.state === "pre" && new Date(g.start) > now && (CAT === "All" || g.league === CAT))
+    .sort((a, b) => b.pick_prob - a.pick_prob).slice(0, n);
+  PARLAY = Object.fromEntries(best.map(g => [g.id, g.pick]));
+  saveParlay(); renderGrid(); renderParlay();
+}
+
+function renderPicks() {
+  let list = (PRED?.games || []).filter(g => CAT === "All" || g.league === CAT);
+  if ($("#psort").value === "prob") list = [...list].sort((a, b) => b.pick_prob - a.pick_prob);
+  $("#grid").innerHTML = list.length ? list.map(gameCard).join("")
+    : `<div class="empty" style="grid-column:1/-1">${PRED ? "No upcoming NFL or NBA games with predictions." : "Predictions not generated yet. Run the workflow once."}</div>`;
+}
+
 function renderGrid() {
+  const picks = TAB === "picks";
+  $("#sort").style.display = picks ? "none" : "";
+  $("#psort").style.display = picks ? "" : "none";
+  $("#pnote").style.display = picks ? "" : "none";
+  if (picks) {
+    $("#pnote").innerHTML = `Winner picks blend the sportsbook line, ESPN's predictor, Kalshi, Polymarket and a points-per-game stats model. Tap a team to add it to a moneyline parlay. Quick build: <button class="pbtn" data-auto="2">Top 2</button> <button class="pbtn" data-auto="3">Top 3</button> <button class="pbtn" data-auto="5">Top 5</button>` +
+      (PRED?.updated ? ` · Updated ${new Date(PRED.updated).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"})}` : "");
+    return renderPicks();
+  }
   let list = (DATA[TAB] || []).filter(b => CAT === "All" || b.category === CAT);
   const s = $("#sort").value;
   const by = {
@@ -220,9 +351,13 @@ async function load() {
   try {
     const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"});
     DATA = await r.json();
-    $("#ver").textContent = DATA.version || "V1.2";
+    $("#ver").textContent = DATA.version || "V1.3";
     $("#upd").textContent = "Updated " + new Date(DATA.updated).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
-    render();
+    try {
+      const pr = await fetch("predictions.json?t=" + Date.now(), {cache: "no-store"});
+      PRED = pr.ok ? await pr.json() : null;
+    } catch (e) { PRED = null; }
+    render(); renderParlay();
   } catch (e) {
     $("#upd").textContent = "Couldn't load data";
     $("#grid").innerHTML = `<div class="empty" style="grid-column:1/-1">No data yet. Run the "Update Kalshi bets" workflow on GitHub.</div>`;
@@ -233,9 +368,19 @@ document.addEventListener("click", e => {
   const t = e.target.closest(".tab");
   if (t) { TAB = t.dataset.tab; document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t)); CAT = "All"; renderChips(); renderGrid(); return; }
   const c = e.target.closest(".chip");
-  if (c) { CAT = c.dataset.cat; renderChips(); renderGrid(); }
+  if (c) { CAT = c.dataset.cat; renderChips(); renderGrid(); return; }
+  const tm = e.target.closest(".team");
+  if (tm) {
+    const id = tm.dataset.gid, side = tm.dataset.side;
+    if (PARLAY[id] === side) delete PARLAY[id]; else PARLAY[id] = side;
+    saveParlay(); renderGrid(); renderParlay(); return;
+  }
+  const a = e.target.closest("[data-auto]");
+  if (a) { autoParlay(+a.dataset.auto); return; }
+  if (e.target.closest("#pclear")) { PARLAY = {}; saveParlay(); renderGrid(); renderParlay(); }
 });
 $("#sort").addEventListener("change", renderGrid);
+$("#psort").addEventListener("change", renderGrid);
 load();
 setInterval(load, 5 * 60e3);
 </script>
