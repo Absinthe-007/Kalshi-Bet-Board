@@ -29,6 +29,9 @@ jobs:
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
           KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
         run: python scripts/fetch_positions.py
+      - name: Fetch game predictions (NFL + NBA)
+        continue-on-error: true
+        run: python scripts/fetch_predictions.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
