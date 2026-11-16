@@ -6,6 +6,7 @@ Env vars (set as GitHub Actions secrets):
 """
 import base64
 import datetime as dt
+import email.utils
 import json
 import math
 import os
@@ -33,33 +34,124 @@ S = requests.Session()
 S.headers["User-Agent"] = "Kalshi-Bet-Board/1.0"
 
 
+# A short 429 or a blip from Kalshi should not fail the 15-minute job.
+# 401/403/404 and a limit that is still in place after these tries still raise.
+MAX_ATTEMPTS = 4
+BACKOFF_SECONDS = (1.0, 2.0, 4.0)
+MAX_RETRY_WAIT = 30.0
+_TRANSIENT_EXC = (
+    requests.ConnectionError,
+    requests.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+
+def _parse_delay(raw, http_date=False):
+    """Seconds from a delay header. HTTP-date is only valid for Retry-After."""
+    text = str(raw).strip()
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        if not http_date:
+            return None
+    try:
+        when = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return (when - dt.datetime.now(dt.timezone.utc)).total_seconds()
+
+
+def _retry_delay(response):
+    """Suggested wait, or None so the caller uses BACKOFF_SECONDS.
+
+    Retry-After wins when a server sends it. Kalshi's 429s carry
+    X-RateLimit-Reset (seconds until that bucket is full) and no Retry-After.
+    """
+    if response is None:
+        return None
+    raw = response.headers.get("Retry-After")
+    if raw:
+        delay = _parse_delay(raw, http_date=True)
+        if delay is not None and delay > 0:
+            return min(delay, MAX_RETRY_WAIT)
+    raw = response.headers.get("X-RateLimit-Reset")
+    if raw:
+        delay = _parse_delay(raw)
+        if delay is not None and delay > 0:
+            return min(delay, MAX_RETRY_WAIT)
+    return None
+
+
+def _wait_seconds(attempt, response):
+    delay = _retry_delay(response)
+    if delay is not None:
+        return delay
+    return BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS) - 1)]
+
+
+def _get_json(send):
+    """Call send() and return its JSON body.
+
+    send() must build a new request on every call. Kalshi signatures include
+    the timestamp, so a retried signed call has to be signed again.
+    """
+    for attempt in range(MAX_ATTEMPTS):
+        last = attempt == MAX_ATTEMPTS - 1
+        try:
+            response = send()
+        except _TRANSIENT_EXC as exc:
+            if last:
+                raise
+            wait = _wait_seconds(attempt, None)
+            print(f"  {type(exc).__name__}: {exc}; retrying in {wait:.2f}s "
+                  f"(attempt {attempt + 1} of {MAX_ATTEMPTS - 1})", flush=True)
+            time.sleep(wait)
+            continue
+        if response.status_code != 429 and response.status_code < 500:
+            response.raise_for_status()
+            return response.json()
+        if last:
+            response.raise_for_status()
+        wait = _wait_seconds(attempt, response)
+        print(f"  HTTP {response.status_code} from {response.url}; retrying in {wait:.2f}s "
+              f"(attempt {attempt + 1} of {MAX_ATTEMPTS - 1})", flush=True)
+        time.sleep(wait)
+
+
 def signed_get(path, params=None):
     """GET an authenticated endpoint. Signature = RSA-PSS(ts + METHOD + path-without-query)."""
-    ts = str(int(time.time() * 1000))
     full_path = API + path
-    msg = (ts + "GET" + full_path).encode()
-    if isinstance(PRIVATE_KEY, ed25519.Ed25519PrivateKey):
-        sig = PRIVATE_KEY.sign(msg)
-    else:
-        sig = PRIVATE_KEY.sign(
-            msg,
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
-            hashes.SHA256(),
-        )
-    headers = {
-        "KALSHI-ACCESS-KEY": KEY_ID,
-        "KALSHI-ACCESS-TIMESTAMP": ts,
-        "KALSHI-ACCESS-SIGNATURE": base64.b64encode(sig).decode(),
-    }
-    r = S.get(BASE + full_path, params=params, headers=headers, timeout=30)
-    r.raise_for_status()
-    return r.json()
+
+    def send():
+        ts = str(int(time.time() * 1000))
+        msg = (ts + "GET" + full_path).encode()
+        if isinstance(PRIVATE_KEY, ed25519.Ed25519PrivateKey):
+            sig = PRIVATE_KEY.sign(msg)
+        else:
+            sig = PRIVATE_KEY.sign(
+                msg,
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+                hashes.SHA256(),
+            )
+        headers = {
+            "KALSHI-ACCESS-KEY": KEY_ID,
+            "KALSHI-ACCESS-TIMESTAMP": ts,
+            "KALSHI-ACCESS-SIGNATURE": base64.b64encode(sig).decode(),
+        }
+        return S.get(BASE + full_path, params=params, headers=headers, timeout=30)
+
+    return _get_json(send)
 
 
 def public_get(path, params=None):
-    r = S.get(BASE + API + path, params=params, timeout=30)
-    r.raise_for_status()
-    return r.json()
+    def send():
+        return S.get(BASE + API + path, params=params, timeout=30)
+
+    return _get_json(send)
 
 
 def paged(path, key, params=None, signed=True, max_pages=20):
